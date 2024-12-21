@@ -96,10 +96,10 @@ class Sentence():
         self.cells = set(cells)
         self.count = count
 
-    def getCount(self):
+    def get_count(self):
         return self.count
 
-    def getCells(self):
+    def get_cells(self):
         return self.cells.copy() # ensure immutability
 
     def __eq__(self, other):
@@ -145,17 +145,38 @@ class Sentence():
         
         self.cells.remove(cell)
 
-    def is_subset_of(self, sentence):
-        if (self.count == 0):
+    def can_make_new_knowledge_with(self, sentence):
+        """
+        Check if is it possible to create a new sentence by
+        merging knowledge from 2 sentences
+        E.g. {A, B, C} = 1 and {A, B, C, D, E} = 2
+        results in {D, E} = 1
+        """
+        if (self.count == 0 or sentence.get_count() == 0):
+            return False
+        
+        if (self.count == sentence.get_count()):
             return False
 
         if (self == sentence):
-            return True
+            return False
         
-        return self.count == sentence.getCount() and self.cells.issubset(sentence.getCells())
+        return self.cells.issubset(sentence.get_cells()) or sentence.get_cells().issubset(self.cells)
     
-    def known_safes_from_superset(self, sentence):
-        return sentence.getCells().difference(self.cells)
+    def get_new_knowledge(self, sentence):
+        """
+        Create a new sentence by merging knowledge from 2 sentences
+        E.g. {A, B, C} = 1 and {A, B, C, D, E} = 2
+        results in {D, E} = 1
+        """
+        if (sentence.get_count() >  self.count):
+            new_count = sentence.get_count() - self.count
+            new_cells = sentence.get_cells().difference(self.cells)
+            return Sentence(new_cells, new_count)
+        else:
+            new_count = self.count - sentence.get_count()
+            new_cells = self.cells.difference(sentence.get_cells())
+            return Sentence(new_cells, new_count)
 
 
 class MinesweeperAI():
@@ -197,7 +218,7 @@ class MinesweeperAI():
         for sentence in self.knowledge:
             sentence.mark_safe(cell)
 
-    def __create_sentence__(self, cell, count):
+    def create_sentence(self, cell, count):
         row = cell[0]
         col = cell[1]
         neighbor_cells = set()
@@ -228,7 +249,7 @@ class MinesweeperAI():
 
                 neighbor_cells.add(neighbour_cell)
         
-        return Sentence(neighbor_cells, count)
+        return Sentence(neighbor_cells, current_count)
 
     def add_knowledge(self, cell, count):
         """
@@ -248,25 +269,39 @@ class MinesweeperAI():
         self.moves_made.add(cell)
         self.mark_safe(cell)
         
-        sentence = self.__create_sentence__(cell, count)
+        sentence = self.create_sentence(cell, count)
         self.knowledge.append(sentence)
 
-        self.mark_all_safes()
-        self.process_subsets(sentence)
+        # mark safes found from new sentence
+        for safe in sentence.known_safes().copy():
+            self.mark_safe(safe)
 
         mines_q = deque()
 
+        # to mark mines found from new sentence
         for mine in self.find_new_mines():
             mines_q.append(mine)
 
         while mines_q:
             mine = mines_q.popleft()
+
+            if mine in self.mines:
+                continue
+
             self.mark_mine(mine)
 
-            self.mark_all_safes()
+            # mine found may lead to new safes found
+            # mark found safes
+            for safe in self.find_new_safes():
+                self.mark_safe(safe)
             
+            # mark safes may lead to new mines found
+            # add them to queue to process them later
             for mine in self.find_new_mines():
                 mines_q.append(mine)
+
+        self.find_new_knowledges(sentence)
+        self.print_knowledge()
                         
     
     def find_new_mines(self):
@@ -285,37 +320,18 @@ class MinesweeperAI():
                     found_safes.add(safe)
         return found_safes
     
-    def process_subsets(self, sentence):
-        tryOneMoreTime = True
+    def find_new_knowledges(self, base_sentence):
+        base_sentence_q = deque()
+        base_sentence_q.append(base_sentence)
 
-        while (tryOneMoreTime):
-            tryOneMoreTime = False
-            for superset in self.knowledge:
-                if (sentence != superset and sentence.is_subset_of(superset)):
-                    tryOneMoreTime = True
-                    safes = sentence.known_safes_from_superset(superset)
-                    for safe in safes:
-                        if (safe in self.safes):
-                            continue
-                        self.mark_safe(safe)
-                        self.mark_all_safes()
+        while (base_sentence_q):
+            base = base_sentence_q.popleft()
 
-    def mark_all_safes(self):
-        safe_q = deque()
-        visited = set()
-
-        for safe in self.find_new_safes():  
-            safe_q.append(safe)
-            visited.add(safe)
-       
-        while safe_q:
-            safe = safe_q.popleft()
-
-            self.mark_safe(safe)
-
-            for safe in self.find_new_safes():  
-                if safe not in visited:
-                    safe_q.append(safe)
+            for sentence in self.knowledge:
+                if (base.can_make_new_knowledge_with(sentence)):
+                    new_knowledge = base.get_new_knowledge(sentence)
+                    base_sentence_q.append(new_knowledge)
+                    self.knowledge.append(new_knowledge)
 
     def make_safe_move(self):
         """
@@ -338,16 +354,30 @@ class MinesweeperAI():
             1) have not already been chosen, and
             2) are not known to be mines
         """
-        for i in range(self.height):
-            for j in range(self.width):
-                return (i, j) # pseudo random - easier for testing
-
-        # possible_cells = []
         # for i in range(self.height):
         #     for j in range(self.width):
         #         if ((i, j) not in self.moves_made):
-        #             possible_cells.append((i, j))
+        #             return (i, j) # pseudo random - easier for testing
 
-        # cell_id = random.randint(0, len(possible_cells) - 1)
-        # return possible_cells[cell_id]
+        possible_cells = []
+        for i in range(self.height):
+            for j in range(self.width):
+                if ((i, j) not in self.moves_made):
+                    possible_cells.append((i, j))
 
+        cell_id = random.randint(0, len(possible_cells) - 1)
+        return possible_cells[cell_id]
+
+    def print_knowledge(self):
+        for i in range(self.height):
+            print()
+            for j in range(self.width):
+                if ((i, j) in self.moves_made):
+                    print('.', end=" ")
+                elif ((i, j) in self.safes):
+                    print('+', end=" ")
+                elif ((i,j) in self.mines):
+                    print('X', end=" ")
+                else:
+                    print(' ', end=" ")
+        print()
