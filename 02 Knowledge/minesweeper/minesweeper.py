@@ -104,6 +104,11 @@ class Sentence():
 
     def __eq__(self, other):
         return self.cells == other.cells and self.count == other.count
+    
+    # for checking if element is in set
+    def __hash__(self):
+        # Hash based on frozenset of cells and count
+        return hash((frozenset(self.cells), self.count))
 
     def __str__(self):
         return f"{self.cells} = {self.count}"
@@ -322,6 +327,7 @@ class MinesweeperAI():
     
     def find_new_knowledges(self, base_sentence):
         base_sentence_q = deque()
+        visited = set()
         base_sentence_q.append(base_sentence)
 
         while (base_sentence_q):
@@ -330,8 +336,10 @@ class MinesweeperAI():
             for sentence in self.knowledge:
                 if (base.can_make_new_knowledge_with(sentence)):
                     new_knowledge = base.get_new_knowledge(sentence)
-                    base_sentence_q.append(new_knowledge)
-                    self.knowledge.append(new_knowledge)
+                    if (new_knowledge not in visited):
+                        visited.add(new_knowledge)
+                        base_sentence_q.append(new_knowledge)
+                        self.knowledge.append(new_knowledge)
 
     def make_safe_move(self):
         """
@@ -345,6 +353,17 @@ class MinesweeperAI():
         for safe in self.safes:
             if safe not in self.moves_made:
                 return safe
+            
+        # There can be a situation when safe cell is isolated by mines.
+        # But it may be a mine too, can't check, cell is isolated.
+        # Let's try, no other option left, otherwise random 
+        # which is not better than this guess. 
+        for i in range(self.height):
+            for j in range(self.width):
+                cell = (i, j)
+                if (cell not in self.moves_made and cell not in self.mines):
+                    return cell
+
         return None
 
     def make_random_move(self):
