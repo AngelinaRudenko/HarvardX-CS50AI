@@ -128,6 +128,26 @@ def powerset(s):
     ]
 
 
+def get_numer_of_genes(person_name, one_gene, two_genes):
+    if person_name in one_gene:
+        return 1
+    if person_name in two_genes:
+        return 2
+    return 0
+
+def has_trait(person_name, have_trait):
+    if person_name in have_trait:
+        return True
+    return False
+
+def inherit_genes_from_parent_prob(parent_genes):
+    if parent_genes == 0:
+        return PROBS["mutation"] # o + mutation probability
+    elif parent_genes == 1:
+        return 0.5
+    else: # parent_genes == 2
+        return 1 - PROBS["mutation"]
+
 def joint_probability(people, one_gene, two_genes, have_trait):
     """
     Compute and return a joint probability.
@@ -139,7 +159,44 @@ def joint_probability(people, one_gene, two_genes, have_trait):
         * everyone in set `have_trait` has the trait, and
         * everyone not in set` have_trait` does not have the trait.
     """
-    raise NotImplementedError
+    joint_prob  = 1
+
+    for person in people.values():
+
+        genes = get_numer_of_genes(person["name"], one_gene, two_genes)
+        trait = has_trait(person["name"], have_trait)
+
+        genes_prob = PROBS["gene"][genes]
+        trait_prob = PROBS["trait"][genes][trait]
+
+        mother = person['mother']
+        father = person['father']
+
+        if mother is None and father is None:
+            joint_prob *= genes_prob * trait_prob
+            continue
+      
+        # parents are in DB
+
+        parent_gave_gene_prob = dict()
+
+        for parent in [ mother, father ]:
+            parent_genes = get_numer_of_genes(parent, one_gene, two_genes)
+            parent_gave_gene_prob[parent] = inherit_genes_from_parent_prob(parent_genes)
+        
+        if genes == 0:
+            # none of parents gave gene
+            joint_prob *= (1 - parent_gave_gene_prob[mother]) * (1 - parent_gave_gene_prob[father])
+        elif genes == 1:
+            # one of parents gave gene
+            joint_prob *= ((1 - parent_gave_gene_prob[mother]) * parent_gave_gene_prob[father]) + (parent_gave_gene_prob[mother] * (1 - parent_gave_gene_prob[father]))
+        else: # genes == 2
+            # both of parents gave gene
+            joint_prob *= parent_gave_gene_prob[mother] * parent_gave_gene_prob[father]
+
+        joint_prob *= trait_prob
+    
+    return joint_prob
 
 
 def update(probabilities, one_gene, two_genes, have_trait, p):
@@ -149,7 +206,12 @@ def update(probabilities, one_gene, two_genes, have_trait, p):
     Which value for each distribution is updated depends on whether
     the person is in `have_gene` and `have_trait`, respectively.
     """
-    raise NotImplementedError
+    for person in probabilities:
+        genes = get_numer_of_genes(person, one_gene, two_genes)
+        trait = has_trait(person, have_trait)
+
+        probabilities[person]["gene"][genes] += p
+        probabilities[person]["trait"][trait] += p
 
 
 def normalize(probabilities):
@@ -157,7 +219,11 @@ def normalize(probabilities):
     Update `probabilities` such that each probability distribution
     is normalized (i.e., sums to 1, with relative proportions the same).
     """
-    raise NotImplementedError
+    for person in probabilities.values():
+        for field in [ "gene", "trait" ]:
+            probs_sum = sum(person[field].values())
+            for key in person[field]:
+                person[field][key] /= probs_sum
 
 
 if __name__ == "__main__":
