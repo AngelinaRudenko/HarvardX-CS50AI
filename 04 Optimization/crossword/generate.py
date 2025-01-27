@@ -1,4 +1,5 @@
 import sys
+from collections import deque
 
 from crossword import *
 
@@ -99,7 +100,10 @@ class CrosswordCreator():
         (Remove any values that are inconsistent with a variable's unary
          constraints; in this case, the length of the word.)
         """
-        raise NotImplementedError
+        for variable in self.crossword.variables:
+            for word in self.crossword.words:
+                if variable.length != len(word):
+                    self.domains[variable].remove(word)
 
     def revise(self, x, y):
         """
@@ -110,7 +114,29 @@ class CrosswordCreator():
         Return True if a revision was made to the domain of `x`; return
         False if no revision was made.
         """
-        raise NotImplementedError
+ 
+        # crossword.overlaps[v1, v2]
+        # The pair (i, j) should be interpreted to mean that the i-th character of v1’s value must be the same as the j-th character of v2’s value.
+        overlap = self.crossword.overlaps[x, y]
+
+        if (overlap == None):
+            return False
+        
+        i = overlap[0]
+        j = overlap[1]
+
+        visited = set()
+        for wordX in self.domains[x]:
+            for wordY in self.domains[y]:
+                if wordX[i] == wordY[j]:
+                    visited.add(wordX)
+                    break
+
+        if len(visited) == len(self.domains[x]):
+            return False
+        
+        self.domains[x] = visited
+        return True
 
     def ac3(self, arcs=None):
         """
@@ -121,21 +147,65 @@ class CrosswordCreator():
         Return True if arc consistency is enforced and no domains are empty;
         return False if one or more domains end up empty.
         """
-        raise NotImplementedError
+
+        queueArcs = set()
+
+        if arcs != None:
+            queueArcs = arcs
+        else:
+            queueArcs = {tuple(sorted((key, value))) for key, value in self.overlaps.items()}
+
+        queue = deque(queueArcs)
+
+        while queue:
+            variables = queue.popleft()  # Remove and get the first element
+            variableX = variables[0]
+            varuableY = variables[1]
+
+            if self.revise(variableX, varuableY):
+                if len(self.domains[variableX]) == 0:
+                    return False
+                for neighbour in self.crossword.neighbors(variableX):
+                    if neighbour != varuableY:
+                        queue.append((neighbour, variableX))
+        
+        return True
 
     def assignment_complete(self, assignment):
         """
         Return True if `assignment` is complete (i.e., assigns a value to each
         crossword variable); return False otherwise.
         """
-        raise NotImplementedError
+        return len(self.crossword.variables) == len(assignment.values())
 
     def consistent(self, assignment):
         """
         Return True if `assignment` is consistent (i.e., words fit in crossword
         puzzle without conflicting characters); return False otherwise.
         """
-        raise NotImplementedError
+        uniqueWords = set()
+        for variable in assignment.keys():
+            word = assignment[variable]
+            if word in uniqueWords:
+                return False
+            
+            uniqueWords.add(word)
+
+            if len(word) != variable.length:
+                return False
+            
+            for neighbour in self.crossword.neighbors(variable):
+                overlap = self.crossword.overlaps[variable, neighbour]
+
+                if overlap == None or neighbour not in assignment:
+                    continue
+                
+                i = overlap[0]
+                j = overlap[1]
+                if word[i] != assignment[neighbour][j]:
+                    return False
+            
+        return True
 
     def order_domain_values(self, var, assignment):
         """
