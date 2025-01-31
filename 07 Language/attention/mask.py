@@ -45,8 +45,14 @@ def get_mask_token_index(mask_token_id, inputs):
     Return the index of the token with the specified `mask_token_id`, or
     `None` if not present in the `inputs`.
     """
-    # TODO: Implement this function
-    raise NotImplementedError
+    # list of token ids that should be fed to the model
+    input_ids = inputs['input_ids'][0]
+   
+    for index, tokens_id in enumerate(input_ids):
+        if tokens_id == mask_token_id:
+            return index
+
+    return None
 
 
 
@@ -55,8 +61,20 @@ def get_color_for_attention_score(attention_score):
     Return a tuple of three integers representing a shade of gray for the
     given `attention_score`. Each value should be in the range [0, 255].
     """
-    # TODO: Implement this function
-    raise NotImplementedError
+    # convert a Tensorflow tensor to number
+    attention_score = attention_score.numpy()
+    # check whether the attention score is between the values 0 and 1, inclusive
+    # if not, fix it so that it is a value between [0, 1]
+    if attention_score < 0:
+        attention_score = 0
+    elif attention_score > 1:
+        attention_score = 1
+
+    # mulitply attention score by 255, then round as we cannot have decimal values
+    gray_shade = 255 * attention_score
+
+    # return RGB triple, tuple of three integers
+    return (round(gray_shade), round(gray_shade), round(gray_shade))
 
 
 
